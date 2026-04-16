@@ -12,7 +12,6 @@ env/
 .vscode/
 .idea/
 
-data/
 log/
 cache/
 swanlog/
