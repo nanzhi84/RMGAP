@@ -44,7 +44,7 @@ RMGAP/
         ├── generative_verifier.py  # GenerativeVerifierRM — YES/NO logprob
         ├── genrm_pointwise.py   # GenRMPointwise — 1-10 score generation
         └── genrm_pairwise.py    # GenRMPairwise — A>B>C>D ranking
-``
+```
 
 
 
