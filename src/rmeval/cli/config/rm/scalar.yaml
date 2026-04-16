@@ -1,0 +1,8 @@
+name: ScalarRM
+
+sglang_cfg:
+  engine:
+    tp_size: 1
+    dp_size: 1
+    mem_fraction_static: 0.7
+    trust_remote_code: true

@@ -1,0 +1,18 @@
+name: DpoImplicitRM
+
+params:
+  reference_model_path: null
+  aggregate:
+    mode: mean
+    gamma: 0.93
+    clip_min: 0.03
+
+sglang_cfg:
+  engine:
+    tp_size: 1
+    dp_size: 1
+    mem_fraction_static: 0.7
+  sampling_params:
+    temperature: 0.0
+    top_p: 1.0
+    top_k: -1

@@ -1,0 +1,27 @@
+name: GenRMPointwise
+
+sglang_cfg:
+  backend: sglang
+
+  engine:
+    tp_size: 1
+    dp_size: 1
+    mem_fraction_static: 0.7
+
+  sampling_params:
+    temperature: 0.0
+    top_p: 1.0
+    top_k: -1
+    max_tokens: 4
+
+  batch_size: 1024
+  max_attempts: 3
+
+  # To use an OpenAI-compatible backend instead:
+  # backend: openai
+  # provider:
+  #   name: openai
+  #   extras:
+  #     api_key: ${oc.env:OPENAI_API_KEY}
+  #     base_url: https://api.openai.com/v1
+  #     max_workers: 128

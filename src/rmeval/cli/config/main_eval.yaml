@@ -1,0 +1,22 @@
+defaults:
+  - rm: endorm
+  - _self_
+  - override hydra/hydra_logging: disabled
+  - override hydra/job_logging: disabled
+
+model:
+  path: null
+  id: null
+
+data:
+  path: data/test.jsonl
+
+output:
+  root_dir: log
+  exp_dir: null
+  save_result: true
+
+hydra:
+  output_subdir: null
+  run:
+    dir: .
