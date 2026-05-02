@@ -1,8 +1,10 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
-dist/
-build/
+.pytest_cache/
+.ruff_cache/
+/dist/
+/build/
 *.egg
 
 .venv/
@@ -16,6 +18,12 @@ log/
 cache/
 swanlog/
 ckpt/
+data/generated/
+data/mixed/
+model/
+source/
+paper/
+RMGAP.pdf
 
 env.sh
 *.env

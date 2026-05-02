@@ -8,4 +8,4 @@ export TOKENIZERS_PARALLELISM="true"
 export NCCL_P2P_DISABLE=1
 export NCCL_IB_DISABLE=1
 
-python -m rmeval.cli.main_eval "$@"
+python -m rmgap.cli.main_eval "$@"

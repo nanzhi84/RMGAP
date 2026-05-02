@@ -1,0 +1,12 @@
+# Input/output files. Paths are resolved relative to this config file.
+input_dir: ../data/generated/prompts-filtered-safety.jsonl
+output_dir: ../data/generated/safety
+resume_dir: null
+
+# Used by the rw_eval stage. You can also set RMGAP_EMBEDDING_MODEL_PATH.
+embedding_model_path: ../model/embeddinggemma-300m
+
+# Data processing settings
+prompt_field: prompt
+limit: 0
+max_workers: 64
