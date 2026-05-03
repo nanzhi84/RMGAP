@@ -71,7 +71,7 @@ def _build_math_protocol(
         record_id=record_id,
         original_prompt=MATH_PROMPT,
         domain="Reasoning",
-        responses={"response1": response},
+        responses={f"response{i}": response for i in range(1, 5)},
         meta={
             "eval": {
                 **MATH_EVAL,
@@ -86,7 +86,7 @@ def _build_code_protocol(record_id: str, response: str) -> Protocol:
         record_id=record_id,
         original_prompt=CODE_PROMPT,
         domain="Reasoning",
-        responses={"response1": response},
+        responses={f"response{i}": response for i in range(1, 5)},
         meta={"eval": dict(CODE_EVAL)},
     )
 
@@ -101,6 +101,19 @@ class ValidatorTests(unittest.TestCase):
 
     def test_math_validator_rejects_incorrect_value(self) -> None:
         proto = _build_math_protocol("math-fail", "Final: \\boxed{5}")
+        self.assertFalse(self.validator.validate(proto))
+
+    def test_math_validator_requires_every_response_to_match(self) -> None:
+        proto = _build_math_protocol("math-one-good", "Final: \\boxed{5}")
+        proto.responses["response3"] = "Solution: \\boxed{\\frac{14}{3}}"
+        self.assertFalse(self.validator.validate(proto))
+
+    def test_validator_requires_four_responses(self) -> None:
+        proto = _build_math_protocol(
+            "math-missing-response",
+            "Final: \\boxed{\\frac{14}{3}}",
+        )
+        del proto.responses["response4"]
         self.assertFalse(self.validator.validate(proto))
 
     def test_math_validator_handles_nested_wrappers(self) -> None:
@@ -153,12 +166,12 @@ class ValidatorTests(unittest.TestCase):
         )
         self.assertTrue(self.validator.validate(proto))
 
-    def test_code_validator_accepts_passing_solution(self) -> None:
+    def test_code_validator_rejects_without_isolated_runner(self) -> None:
         proto = _build_code_protocol(
             "code-pass",
             f"Working implementation:\n```python\n{GOOD_CODE}\n```",
         )
-        self.assertTrue(self.validator.validate(proto))
+        self.assertFalse(self.validator.validate(proto))
 
     def test_code_validator_rejects_failing_solution(self) -> None:
         proto = _build_code_protocol(

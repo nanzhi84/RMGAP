@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+from itertools import combinations
 from pathlib import Path
-from typing import List, TYPE_CHECKING
+from typing import Any, List, TYPE_CHECKING
 
 from tqdm import tqdm
 
@@ -18,6 +19,7 @@ from .routing.state_router import (
     RES_PASSED,
     RW_PASSED,
 )
+from ..prompts.variables import DIMENSION_NAMES, STYLE_LEVEL_INDEX
 from ..schemas.protocol import Protocol
 from ..utils.io import write_jsonl
 
@@ -30,22 +32,84 @@ logger = logging.getLogger(__name__)
 
 REQUIRED_RESPONSES = ["response1", "response2", "response3", "response4"]
 STYLE_ASSIGNMENTS_META_KEY = "style_assignments"
-EXPECTED_STYLE_ASSIGNMENT_KEYS = {f"r{i}" for i in range(1, len(REQUIRED_RESPONSES) + 1)}
+EXPECTED_STYLE_ASSIGNMENT_KEYS = {
+    f"r{i}" for i in range(1, len(REQUIRED_RESPONSES) + 1)
+}
+MIN_RELEASE_STYLE_DISTANCE = 8
+
+
+def _style_vector(assignment: Any) -> tuple[int, ...] | None:
+    if not isinstance(assignment, dict):
+        return None
+    if set(assignment.keys()) != set(DIMENSION_NAMES):
+        return None
+
+    vector: list[int] = []
+    for dimension in DIMENSION_NAMES:
+        value = assignment.get(dimension)
+        level_map = STYLE_LEVEL_INDEX[dimension]
+        if value not in level_map:
+            return None
+        vector.append(level_map[value])
+    return tuple(vector)
+
+
+def _manhattan_distance(left: tuple[int, ...], right: tuple[int, ...]) -> int:
+    return sum(abs(a - b) for a, b in zip(left, right))
+
+
+def _valid_style_assignments(style_assignments: Any) -> bool:
+    if not isinstance(style_assignments, dict):
+        return False
+    if set(style_assignments.keys()) != EXPECTED_STYLE_ASSIGNMENT_KEYS:
+        return False
+
+    vectors: list[tuple[int, ...]] = []
+    for index in range(1, len(REQUIRED_RESPONSES) + 1):
+        vector = _style_vector(style_assignments[f"r{index}"])
+        if vector is None:
+            return False
+        vectors.append(vector)
+
+    return all(
+        _manhattan_distance(left, right) >= MIN_RELEASE_STYLE_DISTANCE
+        for left, right in combinations(vectors, 2)
+    )
+
+
+def _valid_prompt_group_prompts(group: dict) -> bool:
+    base_prompt = (group.get("base_prompt") or "").strip()
+    variants = group.get("variants")
+    if not isinstance(variants, list):
+        return False
+    if not base_prompt or len(variants) < 2:
+        return False
+
+    prompt_texts = [base_prompt]
+    for variant in variants[:2]:
+        if not isinstance(variant, dict):
+            return False
+        text = (variant.get("text") or "").strip()
+        if not text:
+            return False
+        prompt_texts.append(text)
+
+    return len(prompt_texts) == 3 and len(set(prompt_texts)) == 3
+
+
 def _is_eligible_for_test(protocol: Protocol) -> bool:
     """Check if a protocol is eligible for test set writing."""
     res = protocol.responses
-    if not all(key in res and res[key] is not None for key in REQUIRED_RESPONSES):
+    if not all(str(res.get(key, "")).strip() for key in REQUIRED_RESPONSES):
         return False
-    
+
     groups = protocol.pro_gen.get("prompt_groups") or []
     if len(groups) != 4:
         return False
 
     # Require style assignments metadata to be present and well-formed.
     style_assignments = protocol.meta.get(STYLE_ASSIGNMENTS_META_KEY)
-    if not isinstance(style_assignments, dict):
-        return False
-    if set(style_assignments.keys()) != EXPECTED_STYLE_ASSIGNMENT_KEYS:
+    if not _valid_style_assignments(style_assignments):
         return False
 
     # Require that each group has a valid winner, base, and two rewrite variants.
@@ -55,11 +119,7 @@ def _is_eligible_for_test(protocol: Protocol) -> bool:
         if winner_key not in valid_winner_keys:
             return False
 
-        base_prompt = (group.get("base_prompt") or "").strip()
-        variants = group.get("variants")
-        if not isinstance(variants, list):
-            return False
-        if not base_prompt or len(variants) < 2:
+        if not _valid_prompt_group_prompts(group):
             return False
 
     # Require that res, pro, and rw phases have all passed their evaluations.
@@ -84,7 +144,7 @@ class WriteTestStage(Stage):
     def process(self, protocols: List[Protocol]) -> List[Protocol]:
         if not protocols:
             return protocols
-        
+
         rows = []
         for p in tqdm(protocols, desc="Writing test set", unit="item"):
             raw_groups = p.pro_gen.get("prompt_groups") or []
@@ -148,17 +208,19 @@ class WriteTestStage(Stage):
             style_assignments = p.meta.get(STYLE_ASSIGNMENTS_META_KEY)
 
             domain = p.domain
-            rows.append({
-                "id": p.record_id,
-                "domain": domain,
-                "source": p.source,
-                "models": dict(p.models),
-                "responses": responses_list,
-                "prompt_groups": groups,
-                "style_assignments": style_assignments,
-            })
+            rows.append(
+                {
+                    "id": p.record_id,
+                    "domain": domain,
+                    "source": p.source,
+                    "models": dict(p.models),
+                    "responses": responses_list,
+                    "prompt_groups": groups,
+                    "style_assignments": style_assignments,
+                }
+            )
             logger.debug("Added record_id=%s to test set", p.record_id)
-        
+
         # Ensure output directory exists before writing any artifacts
         self.out_dir.mkdir(parents=True, exist_ok=True)
         test_path = self.out_dir / "test.jsonl"
@@ -170,7 +232,11 @@ class WriteTestStage(Stage):
         eligible_list = self.filter_eligible(protocols)
         # Write test set using only eligible protocols; do not mutate the input list
         self.process(eligible_list)
-        return StageResult(protocols, {"total": len(protocols), "eligible": len(eligible_list)})
+        return StageResult(
+            protocols,
+            {"total": len(protocols), "eligible": len(eligible_list)},
+        )
+
 
 @register_stage("write_test")
 def build_write_test_stage(cfg: "Config") -> Stage:

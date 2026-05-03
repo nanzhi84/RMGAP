@@ -16,6 +16,8 @@ from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
+REQUIRED_RESPONSE_KEYS = [f"response{i}" for i in range(1, 5)]
+
 
 def _normalize_eval_types(meta: dict | None) -> List[str]:
     if not isinstance(meta, dict):
@@ -64,15 +66,29 @@ class Validator:
             logger.debug("record_id=%s missing eval type", protocol.record_id)
             return False
 
-        responses = list((protocol.responses or {}).values())
-        checks: List[bool] = []
-        if "math" in eval_types and isinstance(eval_meta, dict):
-            reference = eval_meta.get("answer", "")
-            checks.append(self._math.is_correct(responses, reference))
-        if "code" in eval_types and isinstance(eval_meta, dict):
-            checks.append(self._code.is_correct(responses, eval_meta))
+        if not isinstance(eval_meta, dict):
+            return False
+        responses = protocol.responses or {}
+        response_texts: List[str] = []
+        for key in REQUIRED_RESPONSE_KEYS:
+            value = responses.get(key)
+            if not isinstance(value, str) or not value.strip():
+                logger.debug("record_id=%s missing response %s", protocol.record_id, key)
+                return False
+            response_texts.append(value)
 
-        return bool(checks) and all(checks)
+        if "math" not in eval_types and "code" not in eval_types:
+            return False
+
+        for response in response_texts:
+            if "math" in eval_types:
+                reference = eval_meta.get("answer", "")
+                if not self._math.is_response_correct(response, reference):
+                    return False
+            if "code" in eval_types:
+                if not self._code.is_response_correct(response, eval_meta):
+                    return False
+        return True
 
 
 def filter_reasoning_protocols(

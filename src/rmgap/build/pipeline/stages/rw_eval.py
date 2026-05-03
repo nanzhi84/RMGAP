@@ -55,31 +55,34 @@ def _load_embedding_model(model_path: str) -> SentenceTransformer:
     return SentenceTransformer(str(path))
 
 
-def _min_pairwise_similarity(
+def _min_base_to_variant_similarity(
     model: SentenceTransformer,
     device: torch.device,
-    texts: list[str],
+    base_text: str,
+    variant_texts: list[str],
 ) -> float:
-    """Compute the minimum pairwise cosine similarity among a list of texts."""
-    if len(texts) < 2:
+    """Compute the minimum cosine similarity from the base prompt to variants."""
+    if not base_text or not variant_texts:
         return 0.0
 
-    embeddings = model.encode(
-        texts,
+    base_embedding = model.encode(
+        [base_text],
         convert_to_tensor=True,
         device=device,
         show_progress_bar=False,
     )
-    embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
-    sim_matrix = torch.matmul(embeddings, embeddings.T)
-
-    # Ignore self-similarity on the diagonal by setting them to +1.
-    num = sim_matrix.size(0)
-    sim_matrix = sim_matrix.clone()
-    sim_matrix[torch.arange(num), torch.arange(num)] = 1.0
-
-    min_sim = sim_matrix.min().item()
-    return float(min_sim)
+    variant_embeddings = model.encode(
+        variant_texts,
+        convert_to_tensor=True,
+        device=device,
+        show_progress_bar=False,
+    )
+    base_embedding = torch.nn.functional.normalize(base_embedding, p=2, dim=1)
+    variant_embeddings = torch.nn.functional.normalize(
+        variant_embeddings, p=2, dim=1
+    )
+    similarities = torch.matmul(base_embedding, variant_embeddings.T)
+    return float(similarities.min().item())
 
 
 class RewriteSimilarityEvalStage(Stage):
@@ -109,7 +112,7 @@ class RewriteSimilarityEvalStage(Stage):
 
         Returns:
             True if every group has three prompts (base + two variants)
-            whose pairwise similarities all exceed the threshold.
+            whose base-to-variant similarities all exceed the threshold.
         """
         raw_groups = protocol.pro_gen.get("prompt_groups", [])
         if not isinstance(raw_groups, list) or not raw_groups:
@@ -153,14 +156,18 @@ class RewriteSimilarityEvalStage(Stage):
                 updated_groups.append(group)
                 continue
 
-            all_texts = [base_prompt] + variant_texts
-            min_sim = _min_pairwise_similarity(self.model, self.device, all_texts)
+            min_sim = _min_base_to_variant_similarity(
+                self.model,
+                self.device,
+                base_prompt,
+                variant_texts,
+            )
 
             updated_groups.append(dict(group))
             per_group_similarity.append(
                 {
                     "group": group.get("group"),
-                    "min_pairwise_similarity": min_sim,
+                    "min_base_similarity": min_sim,
                 }
             )
 
@@ -169,17 +176,17 @@ class RewriteSimilarityEvalStage(Stage):
 
         protocol.pro_gen["prompt_groups"] = updated_groups
         overall_min = min(
-            (entry["min_pairwise_similarity"] for entry in per_group_similarity),
+            (entry["min_base_similarity"] for entry in per_group_similarity),
             default=None,
         )
         # Flatten per-group similarity into top-level keys for simpler downstream use.
         rw_eval_payload: dict[str, Any] = {
-            "overall_min_pairwise_similarity": overall_min,
+            "overall_min_base_similarity": overall_min,
         }
         for entry in per_group_similarity:
             group_id = entry.get("group")
-            key = f"group_{group_id}_min_pairwise_similarity"
-            rw_eval_payload[key] = entry.get("min_pairwise_similarity")
+            key = f"group_{group_id}_min_base_similarity"
+            rw_eval_payload[key] = entry.get("min_base_similarity")
 
         protocol.rw_eval = rw_eval_payload
         return not any_group_failed

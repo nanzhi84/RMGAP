@@ -198,17 +198,26 @@ class MathAnswerValidator:
                     candidates.append(cleaned)
         return candidates
 
-    def is_correct(self, responses: Iterable[str], reference_answer: str) -> bool:
+    def is_response_correct(self, response: str, reference_answer: str) -> bool:
         reference_tokens = _tokenize_answer(reference_answer)
         if not reference_tokens:
             return False
 
         reference_counter = Counter(reference_tokens)
 
-        for candidate in self.extract_candidates(responses):
+        for candidate in self.extract_candidates([response]):
             candidate_tokens = _tokenize_answer(candidate)
             if not candidate_tokens:
                 continue
             if Counter(candidate_tokens) == reference_counter:
                 return True
         return False
+
+    def is_correct(self, responses: Iterable[str], reference_answer: str) -> bool:
+        response_list = list(responses)
+        if not response_list:
+            return False
+        return all(
+            self.is_response_correct(response, reference_answer)
+            for response in response_list
+        )

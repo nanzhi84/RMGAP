@@ -12,6 +12,7 @@ from rmgap.rm.base import BaseRM
 METRICS_FILENAME = "metrics.json"
 
 CANONICAL_DOMAINS = ["Chat", "Writing", "Reasoning", "Safety"]
+CANONICAL_DOMAIN_SET = set(CANONICAL_DOMAINS)
 EXPECTED_RESPONSE_COUNT = 4
 EXPECTED_PROMPT_GROUP_COUNT = 4
 EXPECTED_PROMPTS_PER_GROUP = 3
@@ -69,6 +70,11 @@ class TaskRunner:
             if "domain" not in record:
                 raise ValueError(f"Missing 'domain' in record {record_id}.")
             domain: str = record["domain"]
+            if domain not in CANONICAL_DOMAIN_SET:
+                raise ValueError(
+                    f"Record {record_id} has noncanonical domain '{domain}'. "
+                    f"Expected one of {CANONICAL_DOMAINS}."
+                )
             responses: List[Dict[str, Any]] = record["responses"]
             if len(responses) != EXPECTED_RESPONSE_COUNT:
                 raise ValueError(
