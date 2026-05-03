@@ -148,5 +148,3 @@ RMGAP/
 ├── README.md
 └── run.sh
 ```
-
-Local source datasets, generated protocol files, embedding models, logs, caches, paper files, PDF drafts, and secrets are intentionally ignored by Git.
