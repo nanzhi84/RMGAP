@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from typing import Callable, Dict, TYPE_CHECKING
 
 from .base import Stage
@@ -11,6 +12,15 @@ if TYPE_CHECKING:  # pragma: no cover - only imported for typing
 
 StageFactory = Callable[["Config"], Stage]
 _STAGE_REGISTRY: Dict[str, StageFactory] = {}
+_BUILTIN_STAGE_MODULES: Dict[str, str] = {
+    "pro_eval": ".pro_eval",
+    "pro_gen": ".pro_gen",
+    "res_eval": ".res_eval",
+    "res_gen": ".res_gen",
+    "rw_eval": ".rw_eval",
+    "rw_gen": ".rw_gen",
+    "write_test": ".write_test",
+}
 
 
 def register_stage(name: str) -> Callable[[StageFactory], StageFactory]:
@@ -25,17 +35,9 @@ def register_stage(name: str) -> Callable[[StageFactory], StageFactory]:
 
 def get_stage_factory(name: str) -> StageFactory:
     """Return the factory previously registered under the supplied name."""
+    if name not in _STAGE_REGISTRY and name in _BUILTIN_STAGE_MODULES:
+        importlib.import_module(_BUILTIN_STAGE_MODULES[name], __name__)
     return _STAGE_REGISTRY[name]
-
-
-# Import built-in stages so that they register themselves with the registry.
-from . import pro_eval as _pro_eval  # noqa: F401
-from . import pro_gen as _pro_gen  # noqa: F401
-from . import res_eval as _res_eval  # noqa: F401
-from . import res_gen as _res_gen  # noqa: F401
-from . import rw_eval as _rw_eval  # noqa: F401
-from . import rw_gen as _rw_gen  # noqa: F401
-from . import write_test as _write_test  # noqa: F401
 
 
 __all__ = [

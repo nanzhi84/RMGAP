@@ -4,15 +4,14 @@ from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, Iterator, List, Tuple, Union
 
 import numpy as np
-import sglang as sgl
-from sglang.lang.interpreter import ProgramState
 from tqdm import tqdm
-from transformers import PreTrainedTokenizer
 
 from rmgap.provider import ChatMessage, OpenAIChatProvider, ProviderParams
 
+GENERATIVE_RM_BACKENDS = ("sglang", "openai")
 
-def tokenizer_supports_enable_thinking(tokenizer: PreTrainedTokenizer) -> bool:
+
+def tokenizer_supports_enable_thinking(tokenizer: Any) -> bool:
     """Check if the tokenizer's chat template accepts ``enable_thinking``."""
     tpl = getattr(tokenizer, "chat_template", "") or ""
     return "enable_thinking" in tpl
@@ -104,10 +103,15 @@ class GenerativeRM(BaseRM, ABC):
         sglang_cfg: Dict[str, Any],
         **kwargs,
     ) -> List[Dict[str, np.ndarray]]:
-        backend = sglang_cfg.get("backend", "sglang")
+        backend = str(sglang_cfg.get("backend", "sglang")).strip().lower()
         if backend == "openai":
             return self._run_with_provider(model_path, data, sglang_cfg)
-        return self._run_with_sglang(model_path, data, sglang_cfg)
+        if backend == "sglang":
+            return self._run_with_sglang(model_path, data, sglang_cfg)
+        expected = ", ".join(GENERATIVE_RM_BACKENDS)
+        raise ValueError(
+            f"Unsupported RM backend '{backend}'. Expected one of: {expected}."
+        )
 
     def _generate_and_parse(
         self,
@@ -148,11 +152,14 @@ class GenerativeRM(BaseRM, ABC):
         data: List[Dict[str, Any]],
         sglang_cfg: Dict[str, Any],
     ) -> List[Dict[str, np.ndarray]]:
+        import sglang as sgl
+        from sglang.lang.interpreter import ProgramState
+
         runtime = sgl.Runtime(model_path=model_path, **sglang_cfg["engine"])
         sgl.set_default_backend(runtime)
         atexit.register(runtime.shutdown)
 
-        tokenizer: PreTrainedTokenizer = runtime.get_tokenizer()
+        tokenizer = runtime.get_tokenizer()
         chats, context = self._prepare(data)
 
         sampling_params = dict(sglang_cfg.get("sampling_params", {}))

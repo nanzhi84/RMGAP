@@ -1,13 +1,11 @@
 import json
 import os
 from collections import defaultdict
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Protocol, Tuple
 
 import numpy as np
 from loguru._logger import Logger
 from omegaconf import DictConfig, OmegaConf
-
-from rmgap.rm.base import BaseRM
 
 METRICS_FILENAME = "metrics.json"
 
@@ -18,8 +16,20 @@ EXPECTED_PROMPT_GROUP_COUNT = 4
 EXPECTED_PROMPTS_PER_GROUP = 3
 
 
+class RewardModel(Protocol):
+    def __call__(
+        self,
+        *,
+        model_path: str,
+        data: List[Dict[str, Any]],
+        sglang_cfg: Dict[str, Any],
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
+        ...
+
+
 class TaskRunner:
-    def run(self, config: DictConfig, logger: Logger, rm: BaseRM):
+    def run(self, config: DictConfig, logger: Logger, rm: RewardModel):
         unified_items, unified_meta = self._load_dataset(config.data.path)
 
         unified_results = rm(
